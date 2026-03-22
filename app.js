@@ -916,12 +916,12 @@ window.RTVHApp = function App() {
       {/* Conteúdo demais views */}
       <div style={{position:"relative",zIndex:1,flex:view==="mapa"?0:1,
                    display:view==="mapa"?"none":"flex",flexDirection:"column",overflow:"hidden"}}>
-        {view==="home"      && <Home/>}
-        {view==="ev-form"   && <EvForm/>}
-        {view==="fp-form"   && <FpForm/>}
-        {view==="evs"       && <Evs/>}
-        {view==="analise"   && <Analise/>}
-        {view==="suspeitos" && <Suspeitos/>}
+        {view==="home"      && Home()}
+        {view==="ev-form"   && EvForm()}
+        {view==="fp-form"   && FpForm()}
+        {view==="evs"       && Evs()}
+        {view==="analise"   && Analise()}
+        {view==="suspeitos" && Suspeitos()}
       </div>
 
       {/* Navbar */}
