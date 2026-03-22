@@ -457,6 +457,19 @@ window.RTVHApp = function App() {
     setActiveIdx(idx);
   };
 
+  const removeSuspect = (idx) => {
+    if(suspects.length <= 1) { alert("A missão exige pelo menos 1 suspeito."); return; }
+    if(!window.confirm("Excluir definitivamente este Suspeito (" + suspects[idx].label + ") e todos os seus vestígios?")) return;
+    setSuspects(ss => ss.filter((_, i) => i !== idx));
+    if(activeIdx === idx) setActiveIdx(Math.max(0, idx - 1));
+    else if(activeIdx > idx) setActiveIdx(activeIdx - 1);
+  };
+
+  const removeEv = (sIdx, evId) => {
+    if(!window.confirm("Excluir este vestígio permanentemente?")) return;
+    setSuspects(ss => ss.map((s, i) => i === sIdx ? { ...s, evs: s.evs.filter(e => e.id !== evId) } : s));
+  };
+
   // Adicionar evidência
   const addEv = type => {
     if (type==="pegada") { setView("fp-form"); return; }
@@ -468,9 +481,13 @@ window.RTVHApp = function App() {
 
   const submitFp = () => {
     if (!fp.fl) return;
-    const ev = { id:Date.now(), type:"pegada", ts:new Date().toLocaleTimeString("pt-BR"),
-                 gpsLat:currentPos?.lat, gpsLng:currentPos?.lng, ...fp };
-    updateSuspectEvs(activeIdx, [...activeSuspect.evs, ev]);
+    if (fp.id) {
+      updateSuspectEvs(activeIdx, activeSuspect.evs.map(e => e.id === fp.id ? { ...e, ...fp } : e));
+    } else {
+      const ev = { id:Date.now(), type:"pegada", ts:new Date().toLocaleTimeString("pt-BR"),
+                   gpsLat:currentPos?.lat, gpsLng:currentPos?.lng, ...fp };
+      updateSuspectEvs(activeIdx, [...activeSuspect.evs, ev]);
+    }
     setFp(FP0); setView("evs");
   };
 
@@ -538,11 +555,19 @@ window.RTVHApp = function App() {
         <span style={S.lbl}>SUSPEITO ATIVO</span>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
           {suspects.map((s,i)=>(
-            <button key={s.id} onClick={()=>setActiveIdx(i)}
-              style={{...S.seg(i===activeIdx),borderColor:i===activeIdx?s.color:C.border,
-                      color:i===activeIdx?s.color:C.dim,flex:"none",padding:"5px 10px",fontSize:10}}>
-              {s.label}
-            </button>
+            <div key={s.id} style={{ display:"flex" }}>
+              <button onClick={()=>setActiveIdx(i)}
+                style={{...S.seg(i===activeIdx),borderColor:i===activeIdx?s.color:C.border,
+                        color:i===activeIdx?s.color:C.dim,flex:"none",padding:"5px 10px",fontSize:10,borderRight:"none",borderTopRightRadius:0,borderBottomRightRadius:0}}>
+                {s.label}
+              </button>
+              {suspects.length > 1 && (
+                <button onClick={()=>removeSuspect(i)} 
+                  style={{...S.seg(false),borderColor:i===activeIdx?s.color:C.border,color:C.red,padding:"5px",fontSize:12,borderLeftColor:C.border,borderTopLeftRadius:0,borderBottomLeftRadius:0}} title="Excluir Suspeito">
+                  ✕
+                </button>
+              )}
+            </div>
           ))}
           {suspects.length<5 && mission.on && (
             <button onClick={addSuspect}
@@ -686,7 +711,13 @@ window.RTVHApp = function App() {
               <span style={S.badge(ev.type)}>{EV_LABELS[ev.type]}</span>
               {ev.side && <span style={{fontSize:9,color:C.dim}}>{ev.side==="R"?"DIR.":"ESQ."}</span>}
             </div>
-            <span style={{fontSize:9,color:"#1a3828"}}>{ev.ts}</span>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontSize:9,color:"#1a3828"}}>{ev.ts}</span>
+              {ev.type === "pegada" && (
+                <button onClick={()=>{setFp({...FP0, ...ev}); setView("fp-form");}} style={{background:"none",border:"none",color:C.amber,fontSize:14,cursor:"pointer",padding:"0 4px"}} title="Editar">✎</button>
+              )}
+              <button onClick={()=>removeEv(activeIdx, ev.id)} style={{background:"none",border:"none",color:C.red,fontSize:14,cursor:"pointer",padding:"0 4px"}} title="Excluir">✕</button>
+            </div>
           </div>
           {ev.type==="pegada" && (
             <div style={{...S.r3,marginTop:6}}>
