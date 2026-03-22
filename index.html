@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+  <meta name="theme-color" content="#00e676"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="BPR-8"/>
+  <meta name="description" content="Bastão Poligonal de Rastreamento — PMES/BAC — Análise Biomecânica Forense"/>
+
+  <title>BPR-8 · Rastreamento Forense</title>
+  <link rel="manifest" href="./manifest.json"/>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background: #040c08;
+      font-family: 'Courier New', monospace;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      user-select: none;
+    }
+
+    #root {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      /* Safe area para notch / barra de navegação Android */
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    /* Splash enquanto carrega */
+    #splash {
+      position: fixed; inset: 0;
+      background: #040c08;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 9999;
+      transition: opacity 0.4s;
+    }
+    #splash.hide { opacity: 0; pointer-events: none; }
+
+    .splash-title {
+      color: #00e676;
+      font-family: 'Courier New', monospace;
+      font-size: 22px;
+      font-weight: bold;
+      letter-spacing: 6px;
+      margin-bottom: 8px;
+    }
+    .splash-sub {
+      color: #2d5a3d;
+      font-family: 'Courier New', monospace;
+      font-size: 10px;
+      letter-spacing: 3px;
+      margin-bottom: 40px;
+    }
+    .splash-bar-wrap {
+      width: 200px;
+      height: 3px;
+      background: #0c2018;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .splash-bar {
+      height: 100%;
+      width: 0%;
+      background: #00e676;
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+    .splash-status {
+      color: #1a3828;
+      font-family: 'Courier New', monospace;
+      font-size: 9px;
+      letter-spacing: 2px;
+      margin-top: 12px;
+    }
+
+    /* Scanline global */
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: repeating-linear-gradient(
+        0deg, transparent, transparent 2px,
+        rgba(0,230,118,0.007) 2px, rgba(0,230,118,0.007) 4px
+      );
+      pointer-events: none;
+      z-index: 9998;
+    }
+
+    /* Scrollbar tática */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: #040c08; }
+    ::-webkit-scrollbar-thumb { background: #183228; border-radius: 2px; }
+
+    /* Input / select / button reset */
+    input, select, textarea, button {
+      font-family: 'Courier New', monospace;
+      -webkit-appearance: none;
+    }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+    /* Toast de atualização */
+    #update-toast {
+      display: none;
+      position: fixed;
+      bottom: 80px; left: 12px; right: 12px;
+      background: #0b1812;
+      border: 1px solid #00e676;
+      color: #00e676;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      padding: 10px 14px;
+      border-radius: 3px;
+      z-index: 10000;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Splash screen -->
+  <div id="splash">
+    <div class="splash-title">BPR-8</div>
+    <div class="splash-sub">RASTREAMENTO FORENSE · PMES/BAC</div>
+    <div class="splash-bar-wrap">
+      <div class="splash-bar" id="splash-bar"></div>
+    </div>
+    <div class="splash-status" id="splash-status">INICIALIZANDO…</div>
+  </div>
+
+  <!-- Toast de nova versão disponível -->
+  <div id="update-toast">
+    <span>Nova versão disponível</span>
+    <button onclick="updateApp()" style="background:#00e676;color:#040c08;border:none;padding:4px 10px;font-family:monospace;font-size:10px;cursor:pointer;border-radius:2px;">ATUALIZAR</button>
+  </div>
+
+  <!-- Ponto de montagem React -->
+  <div id="root"></div>
+
+  <!-- React + ReactDOM (UMD) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+
+  <!-- Leaflet -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+  <!-- Babel Standalone (transpila JSX no browser) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+  <!-- Progresso da splash -->
+  <script>
+    const bar    = document.getElementById("splash-bar");
+    const status = document.getElementById("splash-status");
+    let prog = 0;
+    const steps = [
+      [20,  "CARREGANDO REACT…"],
+      [45,  "CARREGANDO LEAFLET…"],
+      [65,  "CARREGANDO BABEL…"],
+      [80,  "COMPILANDO APP…"],
+      [95,  "INICIANDO…"],
+      [100, "PRONTO"],
+    ];
+    function advSplash(p, msg) {
+      bar.style.width = p + "%";
+      status.textContent = msg;
+    }
+    // Simula progresso enquanto scripts carregam
+    const timer = setInterval(() => {
+      prog = Math.min(prog + 5, 75);
+      bar.style.width = prog + "%";
+    }, 120);
+
+    function hideSplash() {
+      clearInterval(timer);
+      advSplash(100, "PRONTO");
+      setTimeout(() => {
+        const sp = document.getElementById("splash");
+        if (sp) { sp.classList.add("hide"); setTimeout(()=>sp.remove(), 500); }
+      }, 300);
+    }
+
+    function updateApp() {
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage("SKIP_WAITING");
+      }
+      window.location.reload();
+    }
+  </script>
+
+  <!-- App principal (JSX transpilado pelo Babel standalone) -->
+  <script type="text/babel" data-presets="react" src="./app.js" data-plugins=""></script>
+
+  <!-- Bootstrap React + registro SW -->
+  <script>
+    // Aguarda Babel terminar de compilar o app.js
+    window.addEventListener("load", () => {
+      // Monta o app React
+      function mountApp() {
+        if (typeof window.BPR8App === "undefined") {
+          setTimeout(mountApp, 100);
+          return;
+        }
+        const root = ReactDOM.createRoot(document.getElementById("root"));
+        root.render(React.createElement(window.BPR8App));
+        hideSplash();
+      }
+      mountApp();
+
+      // Registro do Service Worker
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("./sw.js")
+          .then(reg => {
+            // Detecta nova versão disponível
+            reg.addEventListener("updatefound", () => {
+              const nw = reg.installing;
+              nw.addEventListener("statechange", () => {
+                if (nw.state === "installed" && navigator.serviceWorker.controller) {
+                  document.getElementById("update-toast").style.display = "flex";
+                }
+              });
+            });
+          })
+          .catch(err => console.warn("SW não registrado:", err));
+
+        // Recarrega ao ativar nova versão
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (!refreshing) { refreshing = true; window.location.reload(); }
+        });
+      }
+    });
+  </script>
+
+</body>
+</html>
