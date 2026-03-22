@@ -375,6 +375,39 @@ const SOLOS = [
 const FP0 = {fl:"",fw:"",sl:"",depth:"",side:"R",footAngle:"",strideBase:"",notes:"",soilLocal:"medio"};
 
 // ══════════════════════════════════════════════════════════════
+// BANCO DE DADOS LOCAL (IndexedDB)
+// ══════════════════════════════════════════════════════════════
+const DB_NAME = "rtvh_db";
+const openDB = () => new Promise((resolve, reject) => {
+  const req = indexedDB.open(DB_NAME, 1);
+  req.onupgradeneeded = e => { e.target.result.createObjectStore("mission_state", { keyPath: "id" }); };
+  req.onsuccess = () => resolve(req.result);
+  req.onerror = () => reject(req.error);
+});
+const saveState = async (stateObj) => {
+  try {
+    const db = await openDB();
+    const tx = db.transaction("mission_state", "readwrite");
+    tx.objectStore("mission_state").put({ id: "current", ...stateObj });
+  } catch(e) { console.error("Erro DB save", e); }
+};
+const loadState = async () => {
+  try {
+    const db = await openDB();
+    const tx = db.transaction("mission_state", "readonly");
+    const req = tx.objectStore("mission_state").get("current");
+    return new Promise(r => { req.onsuccess = () => r(req.result); req.onerror = () => r(null); });
+  } catch(e) { console.error("Erro DB load", e); return null; }
+};
+const clearState = async () => {
+  try {
+    const db = await openDB();
+    const tx = db.transaction("mission_state", "readwrite");
+    tx.objectStore("mission_state").delete("current");
+  } catch(e) {}
+};
+
+// ══════════════════════════════════════════════════════════════
 // APP PRINCIPAL
 // ══════════════════════════════════════════════════════════════
 window.RTVHApp = function App() {
@@ -391,7 +424,29 @@ window.RTVHApp = function App() {
   const [activeIdx, setActiveIdx] = useState(0);
   const [fp, setFp]               = useState(FP0);
   const [cfg, setCfg]             = useState({soilType:"medio",trackerWeight:"",trackerDepth:""});
+  const [dbLoaded, setDbLoaded]   = useState(false);
   const ticker = useRef(null);
+
+  // Banco de Dados: Inicialização
+  useEffect(() => {
+    loadState().then(data => {
+      if (data) {
+        if (data.mission) setMission(data.mission);
+        if (data.elapsed) setElapsed(data.elapsed);
+        if (data.gpsPoints) setGpsPoints(data.gpsPoints);
+        if (data.suspects) setSuspects(data.suspects);
+        if (data.activeIdx !== undefined) setActiveIdx(data.activeIdx);
+        if (data.cfg) setCfg(data.cfg);
+      }
+      setDbLoaded(true);
+    });
+  }, []);
+
+  // Banco de Dados: Auto-Save
+  useEffect(() => {
+    if (!dbLoaded) return;
+    saveState({ mission, elapsed, gpsPoints, suspects, activeIdx, cfg });
+  }, [mission, elapsed, gpsPoints, suspects, activeIdx, cfg, dbLoaded]);
 
   // Timer
   useEffect(() => {
@@ -445,6 +500,18 @@ window.RTVHApp = function App() {
     stopGPS();
   };
 
+  const resetMissionDB = () => {
+    if(!window.confirm("ATENÇÃO: A missão atual será APAGADA do banco de dados (inclusive todas as fotos anexadas). Tem certeza?")) return;
+    clearState();
+    stopGPS();
+    setMission({ on:false, t0:null });
+    setElapsed(0);
+    setGpsPoints([]);
+    setSuspects([{ id:1, label:SUSPECT_LABELS[0], color:SUSPECT_COLORS[0], evs:[] }]);
+    setActiveIdx(0);
+    setFp(FP0);
+  };
+
   // Suspeito ativo
   const activeSuspect = suspects[activeIdx];
   const updateSuspectEvs = (idx, evs) => {
@@ -477,6 +544,17 @@ window.RTVHApp = function App() {
                  gpsLat:currentPos?.lat, gpsLng:currentPos?.lng, notes:"" };
     updateSuspectEvs(activeIdx, [...activeSuspect.evs, ev]);
     setView("evs");
+  };
+
+  const handlePhotoUpload = (e, sIdx, evId) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const base64 = evt.target.result;
+      setSuspects(ss => ss.map((s, i) => i === sIdx ? { ...s, evs: s.evs.map( ev => ev.id === evId ? { ...ev, photo: base64 } : ev ) } : s));
+    };
+    reader.readAsDataURL(file);
   };
 
   const submitFp = () => {
@@ -600,7 +678,12 @@ window.RTVHApp = function App() {
       </div>
 
       {!mission.on
-        ? <button style={S.btn("primary")} onClick={startMission}>▶ INICIAR MISSÃO + GPS</button>
+        ? <>
+            <button style={S.btn("primary")} onClick={startMission}>▶ INICIAR MISSÃO + GPS</button>
+            {(suspects[0].evs.length > 0 || mission.t0) && (
+              <button style={S.btn("danger")} onClick={resetMissionDB}>✕ LIMPAR BANCO (NOVA MISSÃO)</button>
+            )}
+          </>
         : <>
             <button style={S.btn("amber")} onClick={()=>setView("ev-form")}>+ NOVA EVIDÊNCIA</button>
             <button style={S.btn("danger")} onClick={stopMission}>■ ENCERRAR MISSÃO</button>
@@ -713,12 +796,20 @@ window.RTVHApp = function App() {
             </div>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <span style={{fontSize:9,color:"#1a3828"}}>{ev.ts}</span>
+              <label style={{cursor:"pointer",color:ev.photo?C.green:C.dim,fontSize:14,padding:"0 4px"}} title="Adicionar Foto (Câmera)">
+                📷<input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e => handlePhotoUpload(e, activeIdx, ev.id)} />
+              </label>
               {ev.type === "pegada" && (
                 <button onClick={()=>{setFp({...FP0, ...ev}); setView("fp-form");}} style={{background:"none",border:"none",color:C.amber,fontSize:14,cursor:"pointer",padding:"0 4px"}} title="Editar">✎</button>
               )}
               <button onClick={()=>removeEv(activeIdx, ev.id)} style={{background:"none",border:"none",color:C.red,fontSize:14,cursor:"pointer",padding:"0 4px"}} title="Excluir">✕</button>
             </div>
           </div>
+          {ev.photo && (
+            <div style={{marginTop:8}}>
+              <img src={ev.photo} style={{width:"100%", borderRadius:4, border:`1px solid ${C.border}`}} onClick={()=>window.open(ev.photo)} alt="Foto do vestígio"/>
+            </div>
+          )}
           {ev.type==="pegada" && (
             <div style={{...S.r3,marginTop:6}}>
               {[["fl","COMP.","cm"],["fw","LARG.","cm"],["sl","PASSADA","cm"],
