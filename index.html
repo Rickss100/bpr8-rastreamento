@@ -7,10 +7,10 @@
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-  <meta name="apple-mobile-web-app-title" content="BPR-8"/>
-  <meta name="description" content="Bastão Poligonal de Rastreamento — PMES/BAC — Análise Biomecânica Forense"/>
+  <meta name="apple-mobile-web-app-title" content="RT-VH"/>
+  <meta name="description" content="Rastreador Tático de Vestígios Humanos — PMES / BAC — Batalhão de Ações com Cães"/>
 
-  <title>BPR-8 · Rastreamento Forense</title>
+  <title>RT-VH · Rastreamento Tático de Vestígios Humanos</title>
   <link rel="manifest" href="./manifest.json"/>
 
   <!-- Leaflet CSS -->
@@ -136,8 +136,8 @@
 
   <!-- Splash screen -->
   <div id="splash">
-    <div class="splash-title">BPR-8</div>
-    <div class="splash-sub">RASTREAMENTO FORENSE · PMES/BAC</div>
+    <div class="splash-title">RT-VH</div>
+    <div class="splash-sub">VESTÍGIOS HUMANOS · PMES / BAC</div>
     <div class="splash-bar-wrap">
       <div class="splash-bar" id="splash-bar"></div>
     </div>
@@ -212,12 +212,12 @@
     window.addEventListener("load", () => {
       // Monta o app React
       function mountApp() {
-        if (typeof window.BPR8App === "undefined") {
+        if (typeof window.RTVHApp === "undefined") {
           setTimeout(mountApp, 100);
           return;
         }
         const root = ReactDOM.createRoot(document.getElementById("root"));
-        root.render(React.createElement(window.BPR8App));
+        root.render(React.createElement(window.RTVHApp));
         hideSplash();
       }
       mountApp();

@@ -1,5 +1,5 @@
-// BPR-8 Service Worker — Offline First
-const CACHE = "bpr8-v3";
+// RT-VH Service Worker — Rastreador Tático de Vestígios Humanos — Offline First
+const CACHE = "rtvh-v1";
 const ASSETS = [
   "./index.html",
   "./app.js",
@@ -12,7 +12,7 @@ const ASSETS = [
 ];
 
 // Tiles OSM offline: cache sob demanda até 500 tiles
-const TILE_CACHE = "bpr8-tiles-v1";
+const TILE_CACHE = "rtvh-tiles-v1";
 const MAX_TILES  = 500;
 
 self.addEventListener("install", e => {

@@ -1,4 +1,4 @@
-# BPR-8 · Bastão Poligonal de Rastreamento
+# RT-VH · Rastreador Tático de Vestígios Humanos
 **PMES / Batalhão de Ações com Cães (BAC)**
 Análise Biomecânica Forense — v3 PWA
 
@@ -8,7 +8,7 @@ Análise Biomecânica Forense — v3 PWA
 
 ### 1. Criar repositório no GitHub
 1. Acesse **github.com** → botão **New**
-2. Nome: `bpr8-rastreamento` (ou qualquer nome)
+2. Nome: `rtvh-rastreamento` (ou qualquer nome)
 3. Marque **Public**
 4. Clique **Create repository**
 
@@ -34,7 +34,7 @@ Clique **Commit changes**.
 
 Seu app estará disponível em:
 ```
-https://SEU_USUARIO.github.io/bpr8-rastreamento/
+https://SEU_USUARIO.github.io/rtvh-rastreamento/
 ```
 
 ---

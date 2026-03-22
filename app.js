@@ -2,6 +2,7 @@ const { useState, useEffect, useRef } = React;
 
 // ══════════════════════════════════════════════════════════════
 // MOTOR BIOMECÂNICO v2 — Equações exatas livro BPR-8
+// RT-VH · Rastreador Tático de Vestígios Humanos
 // ══════════════════════════════════════════════════════════════
 const Bio = {
   stature(fl, sex, side = "R") {
@@ -376,7 +377,7 @@ const FP0 = {fl:"",fw:"",sl:"",depth:"",side:"R",footAngle:"",strideBase:"",note
 // ══════════════════════════════════════════════════════════════
 // APP PRINCIPAL
 // ══════════════════════════════════════════════════════════════
-window.BPR8App = function App() {
+window.RTVHApp = function App() {
   const [view, setView]         = useState("home");
   const [mission, setMission]   = useState({ on:false, t0:null });
   const [elapsed, setElapsed]   = useState(0);
@@ -878,8 +879,8 @@ window.BPR8App = function App() {
       {/* Header */}
       <div style={{...S.hdr,position:"relative",zIndex:2}}>
         <div>
-          <div style={{color:C.green,fontSize:12,fontWeight:"bold"}}>BPR-8 · RASTREAMENTO</div>
-          <div style={{fontSize:9,color:"#1a3828"}}>ANÁLISE BIOMECÂNICA FORENSE · PMES/BAC · v3</div>
+          <div style={{color:C.green,fontSize:12,fontWeight:"bold"}}>RT-VH · RASTREAMENTO TÁTICO</div>
+          <div style={{fontSize:9,color:"#1a3828"}}>VESTÍGIOS HUMANOS · PMES / BAC · Batalhão de Ações com Cães</div>
         </div>
         <div style={{textAlign:"right"}}>
           <div style={{fontSize:10,color:gpsStatus==="active"?C.green:gpsStatus==="searching"?C.amber:C.dim}}>
