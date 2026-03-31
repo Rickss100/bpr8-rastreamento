@@ -592,7 +592,7 @@ window.RTVHApp = function App() {
   const C = { bg:"#040c08", panel:"#0b1812", border:"#183228", green:"#00e676",
               dim:"#2d5a3d", muted:"#7ab88a", red:"#ff1744", amber:"#ff8f00" };
   const S = {
-    app:   {minHeight:"100vh",background:C.bg,color:C.muted,fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column"},
+    app:   {height:"100%",overflow:"hidden",background:C.bg,color:C.muted,fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column"},
     hdr:   {background:"#07100d",borderBottom:`1px solid ${C.border}`,padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0},
     cont:  {flex:1,overflowY:"auto",padding:"12px 12px 6px"},
     nav:   {display:"flex",borderTop:`1px solid ${C.border}`,background:"#060e0a",flexShrink:0},
