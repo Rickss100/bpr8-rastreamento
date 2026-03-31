@@ -608,6 +608,37 @@ window.RTVHApp = function App() {
     seg:   a=>({flex:1,padding:"6px 4px",background:a?"#0f2a1a":"none",border:`1px solid ${a?C.green:C.border}`,color:a?C.green:C.dim,fontFamily:"'Courier New',monospace",fontSize:10,cursor:"pointer",borderRadius:2}),
   };
 
+  // ── HOOK GLOBAIS PARA VIEWS ──────────────────────────────────
+  // Canvas de Medição por Câmera (movido para fora de FpCamera para evitar hook crash)
+  useEffect(() => {
+    if (view !== 'fp-camera' || !camState.img || !camCanvasRef.current) return;
+    const canvas = camCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const { img, pts } = camState;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    const CORES = ['#ffd740','#ffd740','#00e676','#00e676','#4fc3f7','#4fc3f7'];
+    const drawLinha = (a, b, cor) => {
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = cor; ctx.lineWidth = 2.5;
+      ctx.setLineDash([7, 4]); ctx.stroke(); ctx.setLineDash([]);
+    };
+    if (pts.length >= 2) drawLinha(pts[0], pts[1], '#ffd740');
+    if (pts.length >= 4) drawLinha(pts[2], pts[3], '#00e676');
+    if (pts.length >= 6) drawLinha(pts[4], pts[5], '#4fc3f7');
+
+    pts.forEach((p, i) => {
+      ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+      ctx.fillStyle = CORES[i] || C.green; ctx.fill();
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(i + 1, p.x, p.y);
+    });
+  }, [view, camState]);
+
   // ── VIEWS ──────────────────────────────────────────────────
 
   const Home = () => (
@@ -869,37 +900,7 @@ window.RTVHApp = function App() {
     ];
     const instrAtual = INSTRUCOES[Math.min(pts.length, 5)];
 
-    // Redesenha canvas sempre que muda pts ou img
-    useEffect(() => {
-      if (!img || !cvs.current) return;
-      const canvas = cvs.current;
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-      const CORES = ['#ffd740','#ffd740','#00e676','#00e676','#4fc3f7','#4fc3f7'];
-
-      // Linhas entre pares de pontos
-      const drawLinha = (a, b, cor) => {
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
-        ctx.strokeStyle = cor; ctx.lineWidth = 2.5;
-        ctx.setLineDash([7, 4]); ctx.stroke(); ctx.setLineDash([]);
-      };
-      if (pts.length >= 2) drawLinha(pts[0], pts[1], '#ffd740');
-      if (pts.length >= 4) drawLinha(pts[2], pts[3], '#00e676');
-      if (pts.length >= 6) drawLinha(pts[4], pts[5], '#4fc3f7');
-
-      // Órbitas de ponto
-      pts.forEach((p, i) => {
-        ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
-        ctx.fillStyle = CORES[i] || C.green; ctx.fill();
-        ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
-        ctx.fillStyle = '#000';
-        ctx.font = 'bold 11px monospace';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(i + 1, p.x, p.y);
-      });
-    }, [img, pts]);
+    // O useEffect do canvas foi movido para o App raiz para evitar hook crash no React.
 
     const handleTap = (e) => {
       e.preventDefault();
