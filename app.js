@@ -427,6 +427,8 @@ window.RTVHApp = function App() {
   const [dbLoaded, setDbLoaded]   = useState(false);
   const [caixas, setCaixas]         = useState([]);
   const [caixaForm, setCaixaForm]   = useState({janela:50,pegadas:'',solo:'medio',sobrepostas:false,notes:''});
+  const camCanvasRef = useRef(null);
+  const [camState, setCamState]     = useState({img:null,pts:[]});
   const ticker = useRef(null);
 
   // Banco de Dados: Inicialização
@@ -722,9 +724,20 @@ window.RTVHApp = function App() {
 
   const FpForm = () => (
     <div style={S.cont}>
-      <div style={{color:C.green,fontSize:11,letterSpacing:3,marginBottom:12}}>
+      <div style={{color:C.green,fontSize:11,letterSpacing:3,marginBottom:10}}>
         👣 PEGADA · <span style={{color:activeSuspect.color}}>{activeSuspect.label}</span>
       </div>
+
+      {/* Botão mão livre - câmera */}
+      <button id="btn-medir-camera" style={{...S.btn('amber',10),display:'flex',alignItems:'center',gap:8,justifyContent:'center'}}
+        onClick={()=>{setCamState({img:null,pts:[]});setView('fp-camera');}}>
+        <span style={{fontSize:16}}>📐</span>
+        <div>
+          <div style={{letterSpacing:2,fontSize:11}}>MEDIR COM CÂMERA</div>
+          <div style={{fontSize:9,opacity:.6,marginTop:1}}>Régua 15,5cm como referência — preenche COMP. e LARG. automaticamente</div>
+        </div>
+      </button>
+
       <label style={S.lbl}>PÉ (define equação — Cap.3)</label>
       <div style={{display:"flex",gap:8,marginBottom:10}}>
         {[["R","PÉ DIREITO (RFPL)"],["L","PÉ ESQUERDO (LFPL)"]].map(([v,l])=>(
@@ -830,6 +843,213 @@ window.RTVHApp = function App() {
       ))}
     </div>
   );
+
+  // ── fp-camera: Medição por câmera com objeto de referência (régua 15,5cm) ──
+  const FpCamera = () => {
+    const REF_LEN = 15.5; // comprimento da régua em cm
+    const { img, pts } = camState;
+    const cvs = camCanvasRef;
+
+    const dist = (a, b) => Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+    const refPx   = pts.length >= 2 ? dist(pts[0], pts[1]) : null;
+    const pxPerCm = refPx ? refPx / REF_LEN : null;
+    const flPx    = pts.length >= 4 ? dist(pts[2], pts[3]) : null;
+    const flMed   = pxPerCm && flPx ? +(flPx / pxPerCm).toFixed(1) : null;
+    const fwPx    = pts.length >= 6 ? dist(pts[4], pts[5]) : null;
+    const fwMed   = pxPerCm && fwPx ? +(fwPx / pxPerCm).toFixed(1) : null;
+
+    // Instruções por número de pontos já tocados
+    const INSTRUCOES = [
+      { txt: '① Toque na PONTA ESQUERDA da régua (0 cm)',         cor: '#ffd740' },
+      { txt: '① Toque na PONTA DIREITA da régua (15,5 cm)',        cor: '#ffd740' },
+      { txt: '② Toque no CALCANHAR da pegada',                       cor: C.green },
+      { txt: '② Toque nos DEDOS da pegada — mede comprimento',       cor: C.green },
+      { txt: '③ Toque na lateral ESQUERDA da pegada — ou pule',      cor: '#4fc3f7' },
+      { txt: '③ Toque na lateral DIREITA da pegada — mede largura',  cor: '#4fc3f7' },
+    ];
+    const instrAtual = INSTRUCOES[Math.min(pts.length, 5)];
+
+    // Redesenha canvas sempre que muda pts ou img
+    useEffect(() => {
+      if (!img || !cvs.current) return;
+      const canvas = cvs.current;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      const CORES = ['#ffd740','#ffd740','#00e676','#00e676','#4fc3f7','#4fc3f7'];
+
+      // Linhas entre pares de pontos
+      const drawLinha = (a, b, cor) => {
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+        ctx.strokeStyle = cor; ctx.lineWidth = 2.5;
+        ctx.setLineDash([7, 4]); ctx.stroke(); ctx.setLineDash([]);
+      };
+      if (pts.length >= 2) drawLinha(pts[0], pts[1], '#ffd740');
+      if (pts.length >= 4) drawLinha(pts[2], pts[3], '#00e676');
+      if (pts.length >= 6) drawLinha(pts[4], pts[5], '#4fc3f7');
+
+      // Órbitas de ponto
+      pts.forEach((p, i) => {
+        ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+        ctx.fillStyle = CORES[i] || C.green; ctx.fill();
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 11px monospace';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(i + 1, p.x, p.y);
+      });
+
+      // Etiquetas nos segmentos
+      const label = (a, b, txt, cor) => {
+        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        ctx.font = 'bold 12px monospace';
+        ctx.fillStyle = cor;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.fillText(txt, mx, my - 4);
+      };
+      if (refPx)  label(pts[0], pts[1], `${REF_LEN}cm ref`, '#ffd740');
+      if (flMed)  label(pts[2], pts[3], `${flMed}cm`, '#00e676');
+      if (fwMed)  label(pts[4], pts[5], `${fwMed}cm`, '#4fc3f7');
+    }, [img, pts]);
+
+    const handleTap = (e) => {
+      e.preventDefault();
+      if (pts.length >= 6) return;
+      const canvas = cvs.current;
+      const rect = canvas.getBoundingClientRect();
+      const touch = e.changedTouches ? e.changedTouches[0] : e;
+      const x = (touch.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (touch.clientY - rect.top) * (canvas.height / rect.height);
+      setCamState(s => ({ ...s, pts: [...s.pts, { x, y }] }));
+    };
+
+    const handleFoto = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      const image = new Image();
+      image.onload = () => {
+        const canvas = cvs.current;
+        if (!canvas) return;
+        const maxW = window.innerWidth - 24;
+        canvas.width  = maxW;
+        canvas.height = Math.round(maxW * image.height / image.width);
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+        setCamState({ img: image, pts: [] });
+        URL.revokeObjectURL(url);
+      };
+      image.src = url;
+    };
+
+    const usarMedidas = () => {
+      setFp(f => ({
+        ...f,
+        fl: flMed != null ? String(flMed) : f.fl,
+        fw: fwMed != null ? String(fwMed) : f.fw,
+      }));
+      setView('fp-form');
+    };
+
+    return (
+      <div style={S.cont}>
+        <div style={{color:C.green,fontSize:11,letterSpacing:2,marginBottom:10}}>
+          📐 MEDIÇÃO POR CÂMERA · Régua 15,5 cm
+        </div>
+
+        {/* Painel objeto de referência */}
+        <div style={{...S.panel,borderColor:'#ffd74055',padding:'8px 10px',marginBottom:10}}>
+          <span style={{...S.lbl,color:'#ffd740'}}>OBJETO DE REFERÊNCIA CONFIGURADO</span>
+          <div style={{fontSize:12,color:'#ffd740',fontWeight:'bold'}}>Régua metálica: 15,5 cm × 1,7 cm</div>
+          <div style={{fontSize:9,color:C.dim,marginTop:2,lineHeight:1.7}}>
+            Posicione a régua ao lado da pegada.<br/>
+            Fotografe perpendicularmente ao solo (dist. 20–40 cm).
+          </div>
+        </div>
+
+        {!img ? (
+          <div style={{textAlign:'center',padding:'20px 0'}}>
+            <label style={{...S.btn('amber',8),display:'block',textAlign:'center',cursor:'pointer'}}>
+              📷 FOTOGRAFAR COM CÂMERA
+              <input type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={handleFoto}/>
+            </label>
+            <label style={{...S.btn('default',0),display:'block',textAlign:'center',cursor:'pointer'}}>
+              🖼 ABRIR DA GALERIA
+              <input type="file" accept="image/*" style={{display:'none'}} onChange={handleFoto}/>
+            </label>
+          </div>
+        ) : (
+          <>
+            {/* Instrução do passo atual */}
+            {pts.length < 6 && (
+              <div style={{background:'#07100d',border:`1px solid ${instrAtual.cor}`,
+                           borderRadius:2,padding:'8px 10px',marginBottom:8,
+                           fontSize:10,color:instrAtual.cor,letterSpacing:1}}>
+                {instrAtual.txt}
+              </div>
+            )}
+
+            {/* Canvas interativo */}
+            <canvas ref={cvs}
+              style={{width:'100%',display:'block',borderRadius:2,
+                      border:`1px solid ${C.border}`,touchAction:'none',cursor:'crosshair'}}
+              onClick={handleTap}
+              onTouchEnd={handleTap}
+            />
+
+            {/* Resultados em tempo real */}
+            {pxPerCm && (
+              <div style={{...S.panel,marginTop:8,padding:'8px 10px'}}>
+                <div style={S.r3}>
+                  <div>
+                    <span style={{...S.lbl,color:'#ffd740'}}>REFERÊNCIA</span>
+                    <span style={{fontSize:9,color:'#ffd740'}}>{Math.round(refPx)}px = {REF_LEN}cm ✓</span>
+                  </div>
+                  {flMed && <div>
+                    <span style={{...S.lbl,color:C.green}}>COMPRIMENTO</span>
+                    <span style={{fontSize:18,color:C.green,fontWeight:'bold'}}>{flMed} cm</span>
+                  </div>}
+                  {fwMed && <div>
+                    <span style={{...S.lbl,color:'#4fc3f7'}}>LARGURA</span>
+                    <span style={{fontSize:18,color:'#4fc3f7',fontWeight:'bold'}}>{fwMed} cm</span>
+                  </div>}
+                </div>
+              </div>
+            )}
+
+            {/* Ações */}
+            <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:8}}>
+              {flMed && (
+                <button id="btn-usar-medidas" style={S.btn('primary')}
+                  onClick={usarMedidas}>
+                  ✓ USAR {flMed} cm{fwMed ? ` × ${fwMed} cm` : ''} NO FORMULÁRIO
+                </button>
+              )}
+              {flMed && !fwMed && pts.length === 4 && (
+                <button style={S.btn('default')} onClick={usarMedidas}>
+                  → PULAR LARGURA — usar só comprimento ({flMed} cm)
+                </button>
+              )}
+              {pts.length > 0 && (
+                <button style={S.btn('amber')}
+                  onClick={()=>setCamState(s=>({...s,pts:s.pts.slice(0,-1)}))}>
+                  ↩ DESFAZER Último ponto ({pts.length}/6)
+                </button>
+              )}
+              <label style={{...S.btn('default'),display:'block',textAlign:'center',cursor:'pointer'}}>
+                🔄 NOVA FOTO
+                <input type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={handleFoto}/>
+              </label>
+            </div>
+          </>
+        )}
+
+        <button style={{...S.btn('default'),marginTop:8}} onClick={()=>setView('fp-form')}>
+          ← VOLTAR SEM MEDIR
+        </button>
+      </div>
+    );
+  };
 
   const Analise = () => {
     if (!activeProfile) return (
@@ -1135,7 +1355,7 @@ window.RTVHApp = function App() {
     {id:"analise", icon:"◈", label:"ANÁLISE"},
     {id:"suspeitos",icon:"⊞",label:"SUSPEITOS"},
   ];
-  const isActive = id => view===id||(id==="ev-form"&&(view==="ev-form"||view==="fp-form"||view==="evs"));
+  const isActive = id => view===id||(id==="ev-form"&&(view==="ev-form"||view==="fp-form"||view==="fp-camera"||view==="evs"));
 
   return (
     <div style={S.app}>
@@ -1185,6 +1405,7 @@ window.RTVHApp = function App() {
         {view==="home"      && Home()}
         {view==="ev-form"   && EvForm()}
         {view==="fp-form"   && FpForm()}
+        {view==="fp-camera" && FpCamera()}
         {view==="evs"       && Evs()}
         {view==="analise"   && Analise()}
         {view==="suspeitos" && Suspeitos()}

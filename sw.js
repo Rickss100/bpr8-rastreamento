@@ -1,5 +1,5 @@
 // RT-VH Service Worker — Rastreador Tático de Vestígios Humanos — Offline First
-const CACHE = "rtvh-v3";
+const CACHE = "rtvh-v4";
 const ASSETS = [
   "./index.html",
   "./app.js",
