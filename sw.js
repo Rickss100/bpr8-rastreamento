@@ -2,7 +2,7 @@
 const CACHE = "rtvh-v5";
 const ASSETS = [
   "./index.html",
-  "./app.js",
+  "./app.js?v=5",
   "./manifest.json",
   "https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js",
   "https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js",
@@ -18,7 +18,7 @@ const MAX_TILES  = 500;
 self.addEventListener("install", e => {
   e.waitUntil(
     caches.open(CACHE)
-      .then(c => c.addAll(ASSETS.map(u => new Request(u, {cache:"force-cache"}))))
+      .then(c => c.addAll(ASSETS.map(u => new Request(u, {cache:"no-cache"}))))
       .then(() => self.skipWaiting())
       .catch(() => self.skipWaiting()) // não bloqueia se CDN falhar
   );
