@@ -425,6 +425,8 @@ window.RTVHApp = function App() {
   const [fp, setFp]               = useState(FP0);
   const [cfg, setCfg]             = useState({soilType:"medio",trackerWeight:"",trackerDepth:""});
   const [dbLoaded, setDbLoaded]   = useState(false);
+  const [caixas, setCaixas]         = useState([]);
+  const [caixaForm, setCaixaForm]   = useState({janela:50,pegadas:'',solo:'medio',sobrepostas:false,notes:''});
   const ticker = useRef(null);
 
   // Banco de Dados: Inicialização
@@ -437,6 +439,7 @@ window.RTVHApp = function App() {
         if (data.suspects) setSuspects(data.suspects);
         if (data.activeIdx !== undefined) setActiveIdx(data.activeIdx);
         if (data.cfg) setCfg(data.cfg);
+        if (data.caixas) setCaixas(data.caixas);
       }
       setDbLoaded(true);
     });
@@ -445,8 +448,8 @@ window.RTVHApp = function App() {
   // Banco de Dados: Auto-Save
   useEffect(() => {
     if (!dbLoaded) return;
-    saveState({ mission, elapsed, gpsPoints, suspects, activeIdx, cfg });
-  }, [mission, elapsed, gpsPoints, suspects, activeIdx, cfg, dbLoaded]);
+    saveState({ mission, elapsed, gpsPoints, suspects, activeIdx, cfg, caixas });
+  }, [mission, elapsed, gpsPoints, suspects, activeIdx, cfg, dbLoaded, caixas]);
 
   // Timer
   useEffect(() => {
@@ -510,6 +513,8 @@ window.RTVHApp = function App() {
     setSuspects([{ id:1, label:SUSPECT_LABELS[0], color:SUSPECT_COLORS[0], evs:[] }]);
     setActiveIdx(0);
     setFp(FP0);
+    setCaixas([]);
+    setCaixaForm({janela:50,pegadas:'',solo:'medio',sobrepostas:false,notes:''});
   };
 
   // Suspeito ativo
@@ -907,81 +912,220 @@ window.RTVHApp = function App() {
     );
   };
 
-  const Suspeitos = () => (
-    <div style={S.cont}>
-      <div style={{fontSize:10,color:C.dim,letterSpacing:2,marginBottom:12}}>COMPARAÇÃO DE PERFIS</div>
-      {suspects.length < 2 && (
-        <div style={{...S.panel,textAlign:"center"}}>
-          <div style={{color:"#1a3828",fontSize:11,letterSpacing:2,lineHeight:2}}>
-            INICIE UMA MISSÃO E ADICIONE<br/>PELO MENOS 2 SUSPEITOS<br/>PARA COMPARAR
-          </div>
-          {mission.on && suspects.length < 5 && (
-            <button style={{...S.btn("amber",0),width:"auto",margin:"12px auto 0",padding:"8px 20px"}}
-              onClick={addSuspect}>+ ADICIONAR SUSPEITO</button>
-          )}
-        </div>
-      )}
+  const Suspeitos = () => {
+    // ── Cálculo da Caixa de Contagem ──────────────────────────
+    const calcCaixa = (form) => {
+      const p = parseInt(form.pegadas);
+      if (!p || p <= 0) return null;
+      const jan = parseInt(form.janela);
+      // Fórmula: cada 50 cm = 1 pé por pessoa → normaliza para 50 cm
+      const base   = p * 50 / jan;
+      const min    = Math.max(1, Math.floor(base));
+      const max    = Math.ceil(base);
+      const est    = Math.round(base);
+      const estAdj = form.sobrepostas ? Math.ceil(est * 1.2) : est;
+      const minAdj = form.sobrepostas ? Math.ceil(min * 1.1) : min;
+      const maxAdj = form.sobrepostas ? Math.ceil(max * 1.2) : max;
+      const confLabel = form.solo === 'medio' ? 'MODERADA' : form.solo === 'baixo' ? 'ALTA (solo mole)' : 'BAIXA (solo duro)';
+      const confColor = form.solo === 'medio' ? '#ffd740' : form.solo === 'baixo' ? C.green : C.amber;
+      const nc = suspects.length;
+      let cross;
+      if (nc >= minAdj && nc <= maxAdj)
+        cross = { msg: `CONSISTENTE — ${nc} suspeito(s) cadastrado(s) ✓`, color: C.green };
+      else if (nc < minAdj)
+        cross = { msg: `⚠ Possíveis indivíduos NÃO CADASTRADOS (${nc} cad. vs ~${estAdj} est.)`, color: C.amber };
+      else
+        cross = { msg: `ⓘ Mais suspeitos cadastrados que o estimado (${nc} vs ~${estAdj})`, color: '#ffd740' };
+      return { est: estAdj, min: minAdj, max: maxAdj, confLabel, confColor, cross };
+    };
 
-      {/* Grid de bonecos */}
-      <div style={{display:"grid", gridTemplateColumns:`repeat(${Math.min(suspects.length,3)}, 1fr)`, gap:8, marginBottom:10}}>
-        {suspects.map((s,i) => {
-          const p = profiles[i];
-          return (
-            <div key={s.id} style={{...S.panel,borderTop:`3px solid ${s.color}`,padding:8}}>
-              <div style={{textAlign:"center",color:s.color,fontSize:9,letterSpacing:1,marginBottom:6}}>{s.label}</div>
-              <BonecoRealista profile={p} color={s.color} compact={true}/>
-              <div style={{fontSize:9,color:C.dim,marginTop:4,textAlign:"center"}}>
-                {p ? `${p.conf}% conf. · ${p.fps} peg.` : "Sem dados"}
+    const resultado = calcCaixa(caixaForm);
+
+    const registrarAmostra = () => {
+      if (!caixaForm.pegadas) return;
+      const res = calcCaixa(caixaForm);
+      setCaixas(prev => [...prev, {
+        id: Date.now(),
+        ts: new Date().toLocaleTimeString('pt-BR'),
+        ...caixaForm,
+        resultado: res
+      }]);
+      setCaixaForm(f => ({...f, pegadas:'', notes:''}));
+    };
+
+    return (
+      <div style={S.cont}>
+
+        {/* ── SEÇÃO: CAIXA DE CONTAGEM ── */}
+        <div style={{fontSize:10,color:C.green,letterSpacing:2,marginBottom:8}}>⊛ CAIXA DE CONTAGEM DE TRILHA</div>
+
+        <div style={S.panel}>
+          <span style={{...S.lbl,color:C.green}}>TAMANHO DA JANELA DE AMOSTRA</span>
+          <div style={{display:'flex',gap:6,marginBottom:10}}>
+            {[[50,'50 cm'],[100,'100 cm'],[150,'150 cm'],[200,'200 cm']].map(([v,l])=>(
+              <button key={v} id={`btn-janela-${v}`} style={S.seg(caixaForm.janela===v)}
+                onClick={()=>setCaixaForm(f=>({...f,janela:v}))}>{l}</button>
+            ))}
+          </div>
+
+          <label style={S.lbl}>Nº DE PEGADAS ENCONTRADAS NA JANELA</label>
+          <input id="inp-pegadas-caixa" style={S.inp} type="number" min="1" placeholder={`ex: ${caixaForm.janela===50?'4':caixaForm.janela===100?'8':'12'}`}
+            value={caixaForm.pegadas} onChange={e=>setCaixaForm(f=>({...f,pegadas:e.target.value}))}/>
+
+          <div style={S.r2}>
+            <div>
+              <label style={S.lbl}>TIPO DE SOLO</label>
+              <select id="sel-solo-caixa" style={{...S.inp,marginBottom:0}} value={caixaForm.solo}
+                onChange={e=>setCaixaForm(f=>({...f,solo:e.target.value}))}>
+                <option value="baixo">Areia / Neve (alta nit.)</option>
+                <option value="medio">Solo Úmido / Lama</option>
+                <option value="alto">Cascalho / Duro</option>
+              </select>
+            </div>
+            <div>
+              <label style={S.lbl}>SOBREPOSIÇÃO</label>
+              <button id="btn-sobrepostas" style={{...S.seg(caixaForm.sobrepostas),width:'100%',height:38}}
+                onClick={()=>setCaixaForm(f=>({...f,sobrepostas:!f.sobrepostas}))}>
+                {caixaForm.sobrepostas ? '⚠ SIM (+20%)' : '○ NÃO'}
+              </button>
+            </div>
+          </div>
+
+          <label style={{...S.lbl,marginTop:6}}>NOTAS DE CAMPO</label>
+          <input id="inp-notas-caixa" style={S.inp} type="text" placeholder="ex: pegadas frescas, trilha estreita..."
+            value={caixaForm.notes} onChange={e=>setCaixaForm(f=>({...f,notes:e.target.value}))}/>
+        </div>
+
+        {/* Resultado tempo-real */}
+        {resultado ? (
+          <div style={{...S.panel,borderLeft:`3px solid ${resultado.confColor}`,marginBottom:10}}>
+            <span style={{...S.lbl,color:resultado.confColor}}>ESTIMATIVA DE INDIVÍDUOS</span>
+            <div style={{display:'flex',alignItems:'center',gap:16,padding:'8px 0'}}>
+              <div style={{textAlign:'center',minWidth:80}}>
+                <div style={{fontSize:56,color:resultado.confColor,fontWeight:'bold',lineHeight:1}}>{resultado.est}</div>
+                <div style={{fontSize:9,color:C.dim,letterSpacing:2,marginTop:2}}>INDIVÍDUOS</div>
+              </div>
+              <div style={{flex:1,fontSize:9,color:C.dim,lineHeight:1.8}}>
+                <div>Intervalo: <span style={{color:resultado.confColor}}>{resultado.min} – {resultado.max}</span></div>
+                <div>Confiança: <span style={{color:resultado.confColor}}>{resultado.confLabel}</span></div>
+                <div>Fórmula: {caixaForm.pegadas} peg × 50 ÷ {caixaForm.janela}cm = {resultado.est}</div>
+                {caixaForm.sobrepostas && <div style={{color:C.amber}}>⚠ +20% por sobreposição</div>}
               </div>
             </div>
-          );
-        })}
-      </div>
+            <div style={{padding:'6px 8px',background:'#07100d',borderRadius:2,
+                         fontSize:9,color:resultado.cross.color,letterSpacing:1,marginTop:4}}>
+              ↔ {resultado.cross.msg}
+            </div>
+          </div>
+        ) : (
+          <div style={{...S.panel,textAlign:'center',padding:'14px'}}>
+            <div style={{color:'#192e1f',fontSize:9,letterSpacing:2,lineHeight:2}}>
+              INFORME O Nº DE PEGADAS<br/>PARA ESTIMAR INDIVÍDUOS
+            </div>
+          </div>
+        )}
 
-      {/* Tabela comparativa */}
-      {suspects.length >= 2 && (
-        <div style={S.panel}>
-          <span style={S.lbl}>TABELA COMPARATIVA</span>
-          <div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:9,fontFamily:"monospace"}}>
-              <thead>
-                <tr>
-                  <td style={{color:C.dim,padding:"4px 6px",borderBottom:`1px solid ${C.border}`}}>ATRIBUTO</td>
-                  {suspects.map(s=>(
-                    <td key={s.id} style={{color:s.color,padding:"4px 6px",borderBottom:`1px solid ${C.border}`,textAlign:"center"}}>{s.label.replace("SUSPEITO ","S")}</td>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  ["SEXO",      p=>p?.sex? (p.sex.sex==="M"?"♂ M":p.sex.sex==="F"?"♀ F":"?")+" "+p.sex.conf+"%":"—"],
-                  ["ESTATURA",  p=>p?.stature?`${p.stature.est}cm`:"—"],
-                  ["PESO",      p=>p?.weight?`~${p.weight.est}kg`:"—"],
-                  ["VELOCIDADE",p=>p?.speed?`${p.speed.kmh}km/h`:"—"],
-                  ["MARCHA",    p=>p?.speed?p.speed.gait.split("/")[0].trim():"—"],
-                  ["PASSADA",   p=>p?.avgSL?`${p.avgSL}cm`:"—"],
-                  ["PÉ (comp)", p=>p?.avgFL?`${p.avgFL}cm`:"—"],
-                  ["CONFIANÇA", p=>p?`${p.conf}%`:"—"],
-                  ["PEGADAS",   p=>p?`${p.fps}`:"—"],
-                ].map(([attr, fn])=>(
-                  <tr key={attr}>
-                    <td style={{color:C.dim,padding:"4px 6px",borderBottom:`1px solid ${C.border}33`}}>{attr}</td>
-                    {suspects.map((s,i)=>(
-                      <td key={s.id} style={{color:C.muted,padding:"4px 6px",borderBottom:`1px solid ${C.border}33`,textAlign:"center"}}>{fn(profiles[i])}</td>
+        <button id="btn-registrar-amostra" style={S.btn('primary')} onClick={registrarAmostra} disabled={!caixaForm.pegadas}>
+          + REGISTRAR AMOSTRA
+        </button>
+
+        {/* Histórico de amostras */}
+        {caixas.length > 0 && (
+          <div style={{...S.panel,marginBottom:12}}>
+            <span style={S.lbl}>HISTÓRICO DE AMOSTRAS ({caixas.length})</span>
+            {[...caixas].reverse().map(c=>(
+              <div key={c.id} style={{display:'flex',justifyContent:'space-between',
+                                      borderBottom:`1px solid ${C.border}33`,paddingBottom:6,marginBottom:6}}>
+                <div style={{fontSize:9,color:C.dim}}>
+                  <span style={{color:'#2a6a40'}}>{c.ts}</span>{' '} {c.pegadas} peg. em {c.janela} cm
+                  {c.notes && <span style={{opacity:.6}}> · {c.notes}</span>}
+                </div>
+                <div style={{fontSize:13,color:c.resultado?.confColor||C.green,fontWeight:'bold',minWidth:30,textAlign:'right'}}>
+                  {c.resultado?.est}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── SEÇÃO: COMPARAÇÃO DE PERFIS ── */}
+        <div style={{fontSize:10,color:C.dim,letterSpacing:2,marginBottom:8,marginTop:4}}>⊞ COMPARAÇÃO DE PERFIS</div>
+
+        {suspects.length < 2 && (
+          <div style={{...S.panel,textAlign:"center"}}>
+            <div style={{color:"#1a3828",fontSize:11,letterSpacing:2,lineHeight:2}}>
+              INICIE UMA MISSÃO E ADICIONE<br/>PELO MENOS 2 SUSPEITOS<br/>PARA COMPARAR
+            </div>
+            {mission.on && suspects.length < 5 && (
+              <button style={{...S.btn("amber",0),width:"auto",margin:"12px auto 0",padding:"8px 20px"}}
+                onClick={addSuspect}>+ ADICIONAR SUSPEITO</button>
+            )}
+          </div>
+        )}
+
+        {/* Grid de bonecos */}
+        <div style={{display:"grid",gridTemplateColumns:`repeat(${Math.min(suspects.length,3)},1fr)`,gap:8,marginBottom:10}}>
+          {suspects.map((s,i) => {
+            const p = profiles[i];
+            return (
+              <div key={s.id} style={{...S.panel,borderTop:`3px solid ${s.color}`,padding:8}}>
+                <div style={{textAlign:"center",color:s.color,fontSize:9,letterSpacing:1,marginBottom:6}}>{s.label}</div>
+                <BonecoRealista profile={p} color={s.color} compact={true}/>
+                <div style={{fontSize:9,color:C.dim,marginTop:4,textAlign:"center"}}>
+                  {p ? `${p.conf}% conf. · ${p.fps} peg.` : "Sem dados"}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Tabela comparativa */}
+        {suspects.length >= 2 && (
+          <div style={S.panel}>
+            <span style={S.lbl}>TABELA COMPARATIVA</span>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:9,fontFamily:"monospace"}}>
+                <thead>
+                  <tr>
+                    <td style={{color:C.dim,padding:"4px 6px",borderBottom:`1px solid ${C.border}`}}>ATRIBUTO</td>
+                    {suspects.map(s=>(
+                      <td key={s.id} style={{color:s.color,padding:"4px 6px",borderBottom:`1px solid ${C.border}`,textAlign:"center"}}>
+                        {s.label.replace("SUSPEITO ","S")}
+                      </td>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {[
+                    ["SEXO",      p=>p?.sex?(p.sex.sex==="M"?"♂ M":p.sex.sex==="F"?"♀ F":"?")+" "+p.sex.conf+"%":"—"],
+                    ["ESTATURA",  p=>p?.stature?`${p.stature.est}cm`:"—"],
+                    ["PESO",      p=>p?.weight?`~${p.weight.est}kg`:"—"],
+                    ["VELOCIDADE",p=>p?.speed?`${p.speed.kmh}km/h`:"—"],
+                    ["MARCHA",    p=>p?.speed?p.speed.gait.split("/")[0].trim():"—"],
+                    ["PASSADA",   p=>p?.avgSL?`${p.avgSL}cm`:"—"],
+                    ["PÉ (comp)", p=>p?.avgFL?`${p.avgFL}cm`:"—"],
+                    ["CONFIANÇA", p=>p?`${p.conf}%`:"—"],
+                    ["PEGADAS",   p=>p?`${p.fps}`:"—"],
+                  ].map(([attr,fn])=>(
+                    <tr key={attr}>
+                      <td style={{color:C.dim,padding:"4px 6px",borderBottom:`1px solid ${C.border}33`}}>{attr}</td>
+                      {suspects.map((s,i)=>(
+                        <td key={s.id} style={{color:C.muted,padding:"4px 6px",borderBottom:`1px solid ${C.border}33`,textAlign:"center"}}>{fn(profiles[i])}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {mission.on && suspects.length < 5 && (
-        <button style={S.btn("amber")} onClick={addSuspect}>+ ADICIONAR SUSPEITO ({suspects.length}/5)</button>
-      )}
-    </div>
-  );
+        {mission.on && suspects.length < 5 && (
+          <button style={S.btn("amber")} onClick={addSuspect}>+ ADICIONAR SUSPEITO ({suspects.length}/5)</button>
+        )}
+      </div>
+    );
+  };
 
   // ── NAV ──────────────────────────────────────────────────────
   const NAV = [
