@@ -844,9 +844,9 @@ window.RTVHApp = function App() {
     </div>
   );
 
-  // ── fp-camera: Medição por câmera com objeto de referência (régua 15,5cm) ──
+  // ── fp-camera: Medição por câmera — BUG FIX: canvas sempre no DOM ──
   const FpCamera = () => {
-    const REF_LEN = 15.5; // comprimento da régua em cm
+    const REF_LEN = 15.5;
     const { img, pts } = camState;
     const cvs = camCanvasRef;
 
@@ -899,18 +899,6 @@ window.RTVHApp = function App() {
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(i + 1, p.x, p.y);
       });
-
-      // Etiquetas nos segmentos
-      const label = (a, b, txt, cor) => {
-        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-        ctx.font = 'bold 12px monospace';
-        ctx.fillStyle = cor;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-        ctx.fillText(txt, mx, my - 4);
-      };
-      if (refPx)  label(pts[0], pts[1], `${REF_LEN}cm ref`, '#ffd740');
-      if (flMed)  label(pts[2], pts[3], `${flMed}cm`, '#00e676');
-      if (fwMed)  label(pts[4], pts[5], `${fwMed}cm`, '#4fc3f7');
     }, [img, pts]);
 
     const handleTap = (e) => {
@@ -927,19 +915,21 @@ window.RTVHApp = function App() {
     const handleFoto = (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const url = URL.createObjectURL(file);
-      const image = new Image();
-      image.onload = () => {
-        const canvas = cvs.current;
-        if (!canvas) return;
-        const maxW = window.innerWidth - 24;
-        canvas.width  = maxW;
-        canvas.height = Math.round(maxW * image.height / image.width);
-        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-        setCamState({ img: image, pts: [] });
-        URL.revokeObjectURL(url);
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const image = new Image();
+        image.onload = () => {
+          const canvas = cvs.current;
+          if (canvas) {
+            const maxW = window.innerWidth - 24;
+            canvas.width  = maxW;
+            canvas.height = Math.round(maxW * image.height / image.width);
+          }
+          setCamState({ img: image, pts: [] });
+        };
+        image.src = evt.target.result;
       };
-      image.src = url;
+      reader.readAsDataURL(file);
     };
 
     const usarMedidas = () => {
@@ -953,34 +943,46 @@ window.RTVHApp = function App() {
 
     return (
       <div style={S.cont}>
-        <div style={{color:C.green,fontSize:11,letterSpacing:2,marginBottom:10}}>
-          📐 MEDIÇÃO POR CÂMERA · Régua 15,5 cm
+        <button style={{...S.btn('default',10)}} onClick={()=>setView('fp-form')}>
+          ← VOLTAR AO FORMULÁRIO
+        </button>
+
+        <div style={{color:C.green,fontSize:11,letterSpacing:2,marginBottom:8}}>
+          📐 MEDIÇÃO POR CÂMERA · Régua 15,5 cm
         </div>
 
-        {/* Painel objeto de referência */}
         <div style={{...S.panel,borderColor:'#ffd74055',padding:'8px 10px',marginBottom:10}}>
-          <span style={{...S.lbl,color:'#ffd740'}}>OBJETO DE REFERÊNCIA CONFIGURADO</span>
-          <div style={{fontSize:12,color:'#ffd740',fontWeight:'bold'}}>Régua metálica: 15,5 cm × 1,7 cm</div>
-          <div style={{fontSize:9,color:C.dim,marginTop:2,lineHeight:1.7}}>
-            Posicione a régua ao lado da pegada.<br/>
-            Fotografe perpendicularmente ao solo (dist. 20–40 cm).
+          <span style={{...S.lbl,color:'#ffd740'}}>REFERÊNCIA: Régua metálica 15,5 cm × 1,7 cm</span>
+          <div style={{fontSize:9,color:C.dim,lineHeight:1.7}}>
+            Posicione a régua ao lado da pegada e fotografe de cima (20–40 cm do solo).
           </div>
         </div>
 
-        {!img ? (
-          <div style={{textAlign:'center',padding:'20px 0'}}>
+        <canvas ref={cvs}
+          style={{width:'100%', display: img ? 'block' : 'none',
+                  borderRadius:2, border:`1px solid ${C.border}`,
+                  touchAction:'none', cursor:'crosshair', marginBottom:8}}
+          onClick={handleTap}
+          onTouchEnd={handleTap}
+        />
+
+        {!img && (
+          <div style={{textAlign:'center',padding:'16px 0'}}>
             <label style={{...S.btn('amber',8),display:'block',textAlign:'center',cursor:'pointer'}}>
               📷 FOTOGRAFAR COM CÂMERA
-              <input type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={handleFoto}/>
+              <input type="file" accept="image/*" capture="environment"
+                     style={{display:'none'}} onChange={handleFoto}/>
             </label>
             <label style={{...S.btn('default',0),display:'block',textAlign:'center',cursor:'pointer'}}>
               🖼 ABRIR DA GALERIA
-              <input type="file" accept="image/*" style={{display:'none'}} onChange={handleFoto}/>
+              <input type="file" accept="image/*"
+                     style={{display:'none'}} onChange={handleFoto}/>
             </label>
           </div>
-        ) : (
+        )}
+
+        {img && (
           <>
-            {/* Instrução do passo atual */}
             {pts.length < 6 && (
               <div style={{background:'#07100d',border:`1px solid ${instrAtual.cor}`,
                            borderRadius:2,padding:'8px 10px',marginBottom:8,
@@ -988,26 +990,16 @@ window.RTVHApp = function App() {
                 {instrAtual.txt}
               </div>
             )}
-
-            {/* Canvas interativo */}
-            <canvas ref={cvs}
-              style={{width:'100%',display:'block',borderRadius:2,
-                      border:`1px solid ${C.border}`,touchAction:'none',cursor:'crosshair'}}
-              onClick={handleTap}
-              onTouchEnd={handleTap}
-            />
-
-            {/* Resultados em tempo real */}
             {pxPerCm && (
-              <div style={{...S.panel,marginTop:8,padding:'8px 10px'}}>
+              <div style={{...S.panel,padding:'8px 10px',marginBottom:8}}>
                 <div style={S.r3}>
                   <div>
-                    <span style={{...S.lbl,color:'#ffd740'}}>REFERÊNCIA</span>
-                    <span style={{fontSize:9,color:'#ffd740'}}>{Math.round(refPx)}px = {REF_LEN}cm ✓</span>
+                    <span style={{...S.lbl,color:'#ffd740'}}>REF</span>
+                    <span style={{fontSize:9,color:'#ffd740'}}>{Math.round(refPx)}px={REF_LEN}cm ✓</span>
                   </div>
                   {flMed && <div>
-                    <span style={{...S.lbl,color:C.green}}>COMPRIMENTO</span>
-                    <span style={{fontSize:18,color:C.green,fontWeight:'bold'}}>{flMed} cm</span>
+                    <span style={{...S.lbl,color:C.green}}>COMP.</span>
+                    <span style={{fontSize:16,color:C.green,fontWeight:'bold'}}>{flMed} cm</span>
                   </div>}
                   {fwMed && <div>
                     <span style={{...S.lbl,color:'#4fc3f7'}}>LARGURA</span>
