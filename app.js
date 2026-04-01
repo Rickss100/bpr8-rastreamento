@@ -949,15 +949,45 @@ window.RTVHApp = function App() {
 
     // O useEffect do canvas foi movido para o App raiz para evitar hook crash no React.
 
-    const handleTap = (e) => {
-      e.preventDefault();
-      if (pts.length >= 6) return;
+    const dragIdx = useRef(null);
+
+    const getCanvasCoord = (e) => {
       const canvas = cvs.current;
+      if (!canvas) return {x:0, y:0};
       const rect = canvas.getBoundingClientRect();
-      const touch = e.changedTouches ? e.changedTouches[0] : e;
+      const touch = (e.touches && e.touches.length > 0) ? e.touches[0] : (e.changedTouches ? e.changedTouches[0] : e);
       const x = (touch.clientX - rect.left) * (canvas.width / rect.width);
       const y = (touch.clientY - rect.top) * (canvas.height / rect.height);
-      setCamState(s => ({ ...s, pts: [...s.pts, { x, y }] }));
+      return {x, y};
+    };
+
+    const handlePointerDown = (e) => {
+      e.preventDefault();
+      const {x, y} = getCanvasCoord(e);
+      // Checa se tocou perto de um ponto existente (raio de 30px)
+      const hit = pts.findIndex(p => Math.sqrt((p.x - x)**2 + (p.y - y)**2) < 30);
+      if (hit !== -1) {
+        dragIdx.current = hit;
+      } else if (pts.length < 6) {
+        setCamState(s => ({ ...s, pts: [...s.pts, {x, y}] }));
+        dragIdx.current = pts.length; // Permite arrastar o ponto recém criado
+      }
+    };
+
+    const handlePointerMove = (e) => {
+      if (dragIdx.current === null) return;
+      e.preventDefault(); // Evita scroll da tela
+      const {x, y} = getCanvasCoord(e);
+      setCamState(s => {
+        const newPts = [...s.pts];
+        newPts[dragIdx.current] = {x, y};
+        return { ...s, pts: newPts };
+      });
+    };
+
+    const handlePointerUp = (e) => {
+      e.preventDefault();
+      dragIdx.current = null;
     };
 
     const handleFoto = (e) => {
@@ -1012,8 +1042,13 @@ window.RTVHApp = function App() {
           style={{width:'100%', display: img ? 'block' : 'none',
                   borderRadius:2, border:`1px solid ${C.border}`,
                   touchAction:'none', cursor:'crosshair', marginBottom:8}}
-          onClick={handleTap}
-          onTouchEnd={handleTap}
+          onTouchStart={handlePointerDown}
+          onTouchMove={handlePointerMove}
+          onTouchEnd={handlePointerUp}
+          onMouseDown={handlePointerDown}
+          onMouseMove={handlePointerMove}
+          onMouseUp={handlePointerUp}
+          onMouseLeave={handlePointerUp}
         />
 
         {!img && (
