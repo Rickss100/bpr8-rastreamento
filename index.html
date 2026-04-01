@@ -204,7 +204,7 @@
   </script>
 
   <!-- App principal (JSX transpilado pelo Babel standalone) -->
-  <script type="text/babel" data-presets="react" src="./app.js?v=6" data-plugins=""></script>
+  <script type="text/babel" data-presets="react" src="./app.js?v=7" data-plugins=""></script>
 
   <!-- Bootstrap React + registro SW -->
   <script>
@@ -226,7 +226,7 @@
       if ("serviceWorker" in navigator) {
         // Força atualização: limpa caches antigos antes de registrar novo SW
         caches.keys().then(keys => {
-          keys.forEach(k => { if (!k.startsWith('rtvh-v6') && !k.startsWith('rtvh-tiles')) { caches.delete(k); } });
+          keys.forEach(k => { if (!k.startsWith('rtvh-v7') && !k.startsWith('rtvh-tiles')) { caches.delete(k); } });
         });
 
         navigator.serviceWorker.register("./sw.js")

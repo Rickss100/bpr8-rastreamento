@@ -877,7 +877,7 @@ window.RTVHApp = function App() {
 
   // ── fp-camera: Medição por câmera — BUG FIX: canvas sempre no DOM ──
   const FpCamera = () => {
-    const REF_LEN = 15.5;
+    const REF_LEN = 15.0; // 15.0cm entre as duas manchas roxas
     const { img, pts } = camState;
     const cvs = camCanvasRef;
 
@@ -891,14 +891,61 @@ window.RTVHApp = function App() {
 
     // Instruções por número de pontos já tocados
     const INSTRUCOES = [
-      { txt: '① Toque na PONTA ESQUERDA da régua (0 cm)',         cor: '#ffd740' },
-      { txt: '① Toque na PONTA DIREITA da régua (15,5 cm)',        cor: '#ffd740' },
-      { txt: '② Toque no CALCANHAR da pegada',                       cor: C.green },
-      { txt: '② Toque nos DEDOS da pegada — mede comprimento',       cor: C.green },
-      { txt: '③ Toque na lateral ESQUERDA da pegada — ou pule',      cor: '#4fc3f7' },
-      { txt: '③ Toque na lateral DIREITA da pegada — mede largura',  cor: '#4fc3f7' },
+      { txt: '① Toque na PONTA ESQUERDA da régua (0 cm)',                 cor: '#ffd740' },
+      { txt: '① Toque na PONTA DIREITA da régua (15,0 cm)',                cor: '#ffd740' },
+      { txt: '② Régua fixa (15cm). Toque no CALCANHAR da pegada',           cor: C.green },
+      { txt: '② Toque nos DEDOS da pegada — mede comprimento',               cor: C.green },
+      { txt: '③ Toque na lateral ESQUERDA da pegada — ou pule',              cor: '#4fc3f7' },
+      { txt: '③ Toque na lateral DIREITA da pegada — mede largura',          cor: '#4fc3f7' },
     ];
     const instrAtual = INSTRUCOES[Math.min(pts.length, 5)];
+
+    // Conversão de Cor e IA de Busca
+    const rgbToHsv = (r, g, b) => {
+      r/=255; g/=255; b/=255;
+      const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx-mn;
+      const s = mx === 0 ? 0 : d/mx;
+      if (mx === mn) return [0, s, mx];
+      let h;
+      if (mx === r) h = (g - b)/d + (g < b ? 6 : 0);
+      else if (mx === g) h = (b - r)/d + 2;
+      else h = (r - g)/d + 4;
+      return [h * 60, s, mx];
+    };
+
+    const autoDetectRuler = (imgObj, w, h) => {
+      try {
+        const off = document.createElement('canvas');
+        off.width = w; off.height = h;
+        const octx = off.getContext('2d', { willReadFrequently: true });
+        octx.drawImage(imgObj, 0, 0, w, h);
+        const data = octx.getImageData(0,0,w,h).data;
+        const cols = 40, rows = 40, cellW = w/cols, cellH = h/rows;
+        const grid = Array(cols*rows).fill(0), cX = Array(cols*rows).fill(0), cY = Array(cols*rows).fill(0);
+
+        for(let y=0; y<h; y+=2) {
+          for(let x=0; x<w; x+=2) {
+            const i = (y*w + x)*4;
+            const hsv = rgbToHsv(data[i], data[i+1], data[i+2]);
+            if (hsv[0] >= 260 && hsv[0] <= 345 && hsv[1] >= 0.25 && hsv[2] >= 0.25) {
+              const ci = Math.floor(y/cellH)*cols + Math.floor(x/cellW);
+              grid[ci]++; cX[ci]+=x; cY[ci]+=y;
+            }
+          }
+        }
+        let m1=0, b1=-1; for(let i=0; i<grid.length; i++) if(grid[i]>m1) { m1=grid[i]; b1=i; }
+        if (b1===-1 || m1<5) return null;
+
+        let m2=0, b2=-1; const b1x=b1%cols, b1y=Math.floor(b1/cols);
+        for(let i=0; i<grid.length; i++) {
+          const dx=(i%cols)-b1x, dy=Math.floor(i/cols)-b1y;
+          if (Math.sqrt(dx*dx + dy*dy)>5 && grid[i]>m2) { m2=grid[i]; b2=i; }
+        }
+        if (b2===-1 || m2<5) return null;
+
+        return [{x: cX[b1]/m1, y: cY[b1]/m1}, {x: cX[b2]/m2, y: cY[b2]/m2}];
+      } catch(e) { return null; }
+    };
 
     // O useEffect do canvas foi movido para o App raiz para evitar hook crash no React.
 
@@ -921,12 +968,14 @@ window.RTVHApp = function App() {
         const image = new Image();
         image.onload = () => {
           const canvas = cvs.current;
+          let autoPts = [];
           if (canvas) {
             const maxW = window.innerWidth - 24;
             canvas.width  = maxW;
             canvas.height = Math.round(maxW * image.height / image.width);
+            autoPts = autoDetectRuler(image, canvas.width, canvas.height) || [];
           }
-          setCamState({ img: image, pts: [] });
+          setCamState({ img: image, pts: autoPts });
         };
         image.src = evt.target.result;
       };
@@ -949,13 +998,13 @@ window.RTVHApp = function App() {
         </button>
 
         <div style={{color:C.green,fontSize:11,letterSpacing:2,marginBottom:8}}>
-          📐 MEDIÇÃO POR CÂMERA · Régua 15,5 cm
+          📐 FOTOGRAMETRIA · Régua 15 cm
         </div>
 
         <div style={{...S.panel,borderColor:'#ffd74055',padding:'8px 10px',marginBottom:10}}>
-          <span style={{...S.lbl,color:'#ffd740'}}>REFERÊNCIA: Régua metálica 15,5 cm × 1,7 cm</span>
+          <span style={{...S.lbl,color:'#ffd740'}}>REFERÊNCIA: Régua Prateada 15,0 cm</span>
           <div style={{fontSize:9,color:C.dim,lineHeight:1.7}}>
-            Posicione a régua ao lado da pegada e fotografe de cima (20–40 cm do solo).
+            Posicione a régua metálica ao lado da pegada. O aplicativo buscará as pontas ROXAS automaticamente!
           </div>
         </div>
 
