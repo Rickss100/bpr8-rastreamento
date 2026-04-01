@@ -428,6 +428,7 @@ window.RTVHApp = function App() {
   const [caixas, setCaixas]         = useState([]);
   const [caixaForm, setCaixaForm]   = useState({janela:50,pegadas:'',solo:'medio',sobrepostas:false,notes:''});
   const camCanvasRef = useRef(null);
+  const camDragIdx = useRef(null);
   const [camState, setCamState]     = useState({img:null,pts:[]});
   const ticker = useRef(null);
 
@@ -949,7 +950,7 @@ window.RTVHApp = function App() {
 
     // O useEffect do canvas foi movido para o App raiz para evitar hook crash no React.
 
-    const dragIdx = useRef(null);
+    const dragIdx = camDragIdx;
 
     const getCanvasCoord = (e) => {
       const canvas = cvs.current;
